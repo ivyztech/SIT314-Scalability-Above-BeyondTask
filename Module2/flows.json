@@ -1,0 +1,341 @@
+[
+    {
+        "id": "b0cf4a78bdbd1111",
+        "type": "tab",
+        "label": "Module 2 Above and Beyond Task",
+        "disabled": false,
+        "info": ""
+    },
+    {
+        "id": "1b3b0f1f0c1b2222",
+        "type": "mqtt in",
+        "z": "b0cf4a78bdbd1111",
+        "name": "Sensors IN forest/+/+/+",
+        "topic": "forest/+/+/+",
+        "qos": "0",
+        "datatype": "json",
+        "broker": "bkr-1111",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "inputs": 0,
+        "x": 190,
+        "y": 120,
+        "wires": [
+            [
+                "c8a2b9a2b33a3333"
+            ]
+        ]
+    },
+    {
+        "id": "c8a2b9a2b33a3333",
+        "type": "function",
+        "z": "b0cf4a78bdbd1111",
+        "name": "Rule Engine: window + quorum + severity + fanout",
+        "func": "// Expect topic: forest/<zone>/<type>/<id>\n// Expect payload: { zone, type, id, value, unit, ts }\n// Output: 4 messages (homeowners, fire, news, social) or null\n\nconst windowMs = 15 * 1000; // sliding window per zone\nconst now = Date.now();\n\n// Parse topic pieces\nconst parts = (msg.topic || \"\").split(\"/\");\n// forest / zone / type / id\nconst zone = parts[1] || msg.payload.zone || \"unknown\";\nconst type = parts[2] || msg.payload.type || \"unknown\";\nconst id   = parts[3] || msg.payload.id   || \"0\";\n\n// Normalize reading\nconst reading = {\n    zone,\n    type,\n    id: String(id),\n    value: Number(msg.payload.value),\n    unit: msg.payload.unit || \"\",\n    ts: msg.payload.ts || new Date().toISOString()\n};\n\n// Keep per-zone window in context\nconst store = context.get('store') || {};\nif (!store[zone]) store[zone] = [];\n\n// Push new reading, then prune old\nstore[zone].push(reading);\nstore[zone] = store[zone].filter(r => (now - Date.parse(r.ts)) <= windowMs);\ncontext.set('store', store);\n\nconst recent = store[zone];\n\n// Thresholds\nconst over = {\n  heat:     r => r.value > 45,\n  smoke:    r => r.value > 70,\n  flame:    r => r.value > 0.6,\n  humidity: r => r.value < 25\n};\n\nconst typesOver = new Set();\nconst sensorsOver = new Set();\n\nfor (const r of recent) {\n  const fn = over[r.type];\n  if (fn && fn(r)) {\n    typesOver.add(r.type);\n    sensorsOver.add(`${r.type}:${r.id}`);\n  }\n}\n\nconst quorum = (typesOver.size >= 2) && (sensorsOver.size >= 2);\nif (!quorum) { return null; }\n\n// Severity heuristics\nconst veryHot   = recent.some(r => r.type === 'heat' && r.value > 48);\nconst heavySmoke= recent.some(r => r.type === 'smoke' && r.value > 85);\nconst flamesHigh= recent.some(r => r.type === 'flame' && r.value > 0.8);\nconst veryDry   = recent.some(r => r.type === 'humidity' && r.value < 20);\n\nlet severity = 'Watch';\nif ((veryHot && heavySmoke) || flamesHigh || (veryDry && veryHot)) {\n  severity = 'Emergency';\n}\n\nconst summary = {\n  zone,\n  severity,\n  at: new Date().toISOString(),\n  reasons: Array.from(typesOver),\n  counts: { distinctTypes: typesOver.size, sensorsOver: sensorsOver.size }\n};\n\n// 4 audience-specific payloads\nconst msgHome = {\n  topic: `alerts/homeowners/${zone}`,\n  payload: `ALERT (${severity}) in ${zone}. Stay alert and follow CFA updates.`\n};\nconst msgFire = {\n  topic: `alerts/fire/${zone}`,\n  payload: { ...summary, recent }\n};\nconst msgNews = {\n  topic: `alerts/news/state`,\n  payload: `BREAKING: Fire risk ${severity} reported in ${zone}`\n};\nconst msgSocial = {\n  topic: `alerts/social/${zone}`,\n  payload: `#${zone} Fire ${severity} — stay safe.`\n};\n\nreturn [msgHome, msgFire, msgNews, msgSocial];",
+        "outputs": 4,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 520,
+        "y": 120,
+        "wires": [
+            [
+                "1e7a1ac9f1ff4444",
+                "b2d1a71a0aab5555"
+            ],
+            [
+                "517e5dc9ea7e6666",
+                "22b83db3a4a77777",
+                "40c352257d68b495"
+            ],
+            [
+                "9b8b3d3c1e8f8888",
+                "0bf0fa3a9b999999"
+            ],
+            [
+                "9a1f5e6d7c6b0000",
+                "f8b7a6c5d4e3aaaa"
+            ]
+        ]
+    },
+    {
+        "id": "1e7a1ac9f1ff4444",
+        "type": "rbe",
+        "z": "b0cf4a78bdbd1111",
+        "name": "RBE homeowners",
+        "func": "rbe",
+        "gap": "",
+        "start": "",
+        "inout": "out",
+        "septopics": true,
+        "x": 810,
+        "y": 60,
+        "wires": [
+            [
+                "7a1cc2a0aabbbbbb"
+            ]
+        ]
+    },
+    {
+        "id": "b2d1a71a0aab5555",
+        "type": "delay",
+        "z": "b0cf4a78bdbd1111",
+        "name": "Rate limit 1 msg/10s",
+        "pauseType": "rate",
+        "timeout": "5",
+        "timeoutUnits": "seconds",
+        "rate": "1",
+        "nbRateUnits": "10",
+        "rateUnits": "second",
+        "randomFirst": "0",
+        "randomLast": "0",
+        "randomUnits": "seconds",
+        "drop": true,
+        "outputs": 1,
+        "x": 830,
+        "y": 100,
+        "wires": [
+            [
+                "7a1cc2a0aabbbbbb"
+            ]
+        ]
+    },
+    {
+        "id": "7a1cc2a0aabbbbbb",
+        "type": "mqtt out",
+        "z": "b0cf4a78bdbd1111",
+        "name": "alerts/homeowners/#",
+        "topic": "",
+        "qos": "",
+        "retain": "",
+        "respTopic": "",
+        "contentType": "",
+        "userProps": "",
+        "correl": "",
+        "expiry": "",
+        "broker": "bkr-1111",
+        "x": 1100,
+        "y": 80,
+        "wires": []
+    },
+    {
+        "id": "517e5dc9ea7e6666",
+        "type": "rbe",
+        "z": "b0cf4a78bdbd1111",
+        "name": "RBE fire",
+        "func": "rbe",
+        "gap": "",
+        "start": "",
+        "inout": "out",
+        "septopics": true,
+        "x": 780,
+        "y": 160,
+        "wires": [
+            [
+                "f2f3e4d5c6b5cccc"
+            ]
+        ]
+    },
+    {
+        "id": "22b83db3a4a77777",
+        "type": "delay",
+        "z": "b0cf4a78bdbd1111",
+        "name": "Rate limit 1 msg/10s",
+        "pauseType": "rate",
+        "timeout": "5",
+        "timeoutUnits": "seconds",
+        "rate": "1",
+        "nbRateUnits": "10",
+        "rateUnits": "second",
+        "randomFirst": "0",
+        "randomLast": "0",
+        "randomUnits": "seconds",
+        "drop": true,
+        "outputs": 1,
+        "x": 800,
+        "y": 200,
+        "wires": [
+            [
+                "f2f3e4d5c6b5cccc"
+            ]
+        ]
+    },
+    {
+        "id": "f2f3e4d5c6b5cccc",
+        "type": "mqtt out",
+        "z": "b0cf4a78bdbd1111",
+        "name": "alerts/fire/#",
+        "topic": "",
+        "qos": "",
+        "retain": "",
+        "respTopic": "",
+        "contentType": "",
+        "userProps": "",
+        "correl": "",
+        "expiry": "",
+        "broker": "bkr-1111",
+        "x": 1060,
+        "y": 180,
+        "wires": []
+    },
+    {
+        "id": "9b8b3d3c1e8f8888",
+        "type": "rbe",
+        "z": "b0cf4a78bdbd1111",
+        "name": "RBE news",
+        "func": "rbe",
+        "gap": "",
+        "start": "",
+        "inout": "out",
+        "septopics": true,
+        "x": 780,
+        "y": 260,
+        "wires": [
+            [
+                "2e2e2e2e2e2edddd"
+            ]
+        ]
+    },
+    {
+        "id": "0bf0fa3a9b999999",
+        "type": "delay",
+        "z": "b0cf4a78bdbd1111",
+        "name": "Rate limit 1 msg/10s",
+        "pauseType": "rate",
+        "timeout": "5",
+        "timeoutUnits": "seconds",
+        "rate": "1",
+        "nbRateUnits": "10",
+        "rateUnits": "second",
+        "randomFirst": "0",
+        "randomLast": "0",
+        "randomUnits": "seconds",
+        "drop": true,
+        "outputs": 1,
+        "x": 800,
+        "y": 300,
+        "wires": [
+            [
+                "2e2e2e2e2e2edddd"
+            ]
+        ]
+    },
+    {
+        "id": "2e2e2e2e2e2edddd",
+        "type": "mqtt out",
+        "z": "b0cf4a78bdbd1111",
+        "name": "alerts/news/#",
+        "topic": "",
+        "qos": "",
+        "retain": "",
+        "respTopic": "",
+        "contentType": "",
+        "userProps": "",
+        "correl": "",
+        "expiry": "",
+        "broker": "bkr-1111",
+        "x": 1050,
+        "y": 280,
+        "wires": []
+    },
+    {
+        "id": "9a1f5e6d7c6b0000",
+        "type": "rbe",
+        "z": "b0cf4a78bdbd1111",
+        "name": "RBE social",
+        "func": "rbe",
+        "gap": "",
+        "start": "",
+        "inout": "out",
+        "septopics": true,
+        "x": 780,
+        "y": 360,
+        "wires": [
+            [
+                "0a0a0a0a0a0aeeee"
+            ]
+        ]
+    },
+    {
+        "id": "f8b7a6c5d4e3aaaa",
+        "type": "delay",
+        "z": "b0cf4a78bdbd1111",
+        "name": "Rate limit 1 msg/10s",
+        "pauseType": "rate",
+        "timeout": "5",
+        "timeoutUnits": "seconds",
+        "rate": "1",
+        "nbRateUnits": "10",
+        "rateUnits": "second",
+        "randomFirst": "0",
+        "randomLast": "0",
+        "randomUnits": "seconds",
+        "drop": true,
+        "outputs": 1,
+        "x": 800,
+        "y": 400,
+        "wires": [
+            [
+                "0a0a0a0a0a0aeeee"
+            ]
+        ]
+    },
+    {
+        "id": "0a0a0a0a0a0aeeee",
+        "type": "mqtt out",
+        "z": "b0cf4a78bdbd1111",
+        "name": "alerts/social/#",
+        "topic": "",
+        "qos": "",
+        "retain": "",
+        "respTopic": "",
+        "contentType": "",
+        "userProps": "",
+        "correl": "",
+        "expiry": "",
+        "broker": "bkr-1111",
+        "x": 1050,
+        "y": 380,
+        "wires": []
+    },
+    {
+        "id": "40c352257d68b495",
+        "type": "debug",
+        "z": "b0cf4a78bdbd1111",
+        "name": "debug",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 550,
+        "y": 280,
+        "wires": []
+    },
+    {
+        "id": "bkr-1111",
+        "type": "mqtt-broker",
+        "name": "HiveMQ Public",
+        "broker": "broker.hivemq.com",
+        "port": "1883",
+        "tls": "",
+        "clientid": "",
+        "usetls": false,
+        "protocolVersion": "4",
+        "keepalive": "60",
+        "cleansession": true,
+        "birthTopic": "",
+        "birthQos": "0",
+        "birthPayload": "",
+        "closeTopic": "",
+        "closePayload": "",
+        "willTopic": "",
+        "willQos": "0",
+        "willPayload": ""
+    }
+]
