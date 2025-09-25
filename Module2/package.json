@@ -1,0 +1,19 @@
+{
+  "name": "sit314week4",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "heat": "node sensor_heat.js",
+    "smoke": "node sensor_smoke.js",
+    "flame": "node sensor_flame.js",
+    "humidity": "node sensor_humidity.js",
+    "spawn": "node spawn_sensors.js",
+    "homeowners": "node sub_homeowners.js",
+    "fire": "node sub_fire_service.js",
+    "news": "node sub_news.js",
+    "social": "node sub_social.js"
+  },
+  "dependencies": {
+    "mqtt": "^5.5.4"
+  }
+}

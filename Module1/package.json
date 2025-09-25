@@ -1,0 +1,14 @@
+{
+  "name": "sit314_week2",
+  "version": "1.0.0",
+  "type": "commonjs",
+  "scripts": {
+    "server": "node weather_service.js",
+    "temp": "node temperature_node.js",
+    "wind": "node wind_node.js",
+    "rain": "node rain_node.js",
+    "fire": "node fire_service_node.js",
+    "clients": "node warning_request.js"
+  },
+  "dependencies": {}
+}
