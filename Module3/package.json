@@ -1,0 +1,28 @@
+{
+  "name": "module3-smart-hvac",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "edge": "node edge_node.js",
+    "hvac": "node hvac_node.js",
+    "sensor": "node sensor_room.js",
+    "dev:edge": "nodemon edge_node.js",
+    "dev:hvac": "nodemon hvac_node.js",
+    "dev:sensor": "nodemon sensor_room.js"
+  },
+  "dependencies": {
+    "axios": "^1.12.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
+    "express": "^4.21.2",
+    "mongodb": "^6.20.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  },
+  "main": "edge_node.js",
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": ""
+}
